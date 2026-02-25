@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KMLens — Kaplan-Meier Digitizer & Censoring Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+:root {
+  --bg:#080b10; --sf:#101419; --sf2:#181d26; --bd:#222835;
+  --ac:#00ddb4; --a2:#ff6b6b; --a3:#ffd166; --a4:#7c9eff; --a5:#c084fc;
+  --tx:#dde1ed; --mu:#5a6478;
+  --fd:'Syne',sans-serif; --fm:'DM Mono',monospace; --fb:'DM Sans',sans-serif;
+  --c1:#00ddb4; --c2:#ff6b6b;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--tx);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+/* HEADER */
+.hdr{padding:18px 40px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--bd);position:sticky;top:0;
+  background:rgba(8,11,16,.95);backdrop-filter:blur(16px);z-index:300;}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:20px;letter-spacing:-.3px;}
+.logo em{color:var(--ac);font-style:normal;}
+.stepdots{display:flex;align-items:center;gap:7px;}
+.sd{width:7px;height:7px;border-radius:50%;background:var(--bd);transition:all .3s;}
+.sd.on{background:var(--ac);box-shadow:0 0 9px var(--ac);}
+.sd.done{background:var(--ac);opacity:.3;}
+.slb{font-family:'DM Mono',monospace;font-size:10px;color:var(--mu);letter-spacing:.12em;text-transform:uppercase;margin-left:10px;}
+
+/* LAYOUT */
+.main{max-width:1380px;margin:0 auto;padding:0 40px 80px;}
+.panel{display:none;animation:fu .3s ease;}
+.panel.on{display:block;}
+@keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* HERO */
+.hero{padding:44px 0 32px;border-bottom:1px solid var(--bd);margin-bottom:36px;}
+.sn{font-family:'DM Mono',monospace;font-size:10px;color:var(--ac);letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px;}
+.st{font-family:'Syne',sans-serif;font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:12px;}
+.sd2{font-size:13px;color:var(--mu);max-width:500px;line-height:1.75;}
+
+/* GRIDS */
+.g2{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start;}
+.g2w{display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start;}
+.g2eq{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+
+/* CARDS */
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:13px;padding:26px;}
+.ct{font-family:'Syne',sans-serif;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:20px;}
+
+/* UPLOAD ZONE — fixed to use label trick for reliable drop */
+.uzone{border:2px dashed var(--bd);border-radius:10px;padding:52px 24px;text-align:center;
+  cursor:pointer;transition:all .25s;position:relative;}
+.uzone.over,.uzone:hover{border-color:var(--ac);background:rgba(0,221,180,.04);}
+
+.uico{font-size:42px;margin-bottom:12px;display:block;}
+.utit{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:5px;}
+.usub{font-size:12px;color:var(--mu);}
+#prevImg{max-width:100%;border-radius:8px;display:block;margin-top:14px;}
+
+/* FORM */
+.fg{display:flex;flex-direction:column;gap:6px;}
+.fl{font-family:'DM Mono',monospace;font-size:10px;color:var(--mu);letter-spacing:.12em;text-transform:uppercase;}
+.fi{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;
+  padding:8px 12px;color:var(--tx);font-family:'DM Mono',monospace;font-size:13px;
+  outline:none;transition:border-color .2s;width:100%;}
+.fi:focus{border-color:var(--ac);}
+.fsel{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;
+  padding:8px 28px 8px 12px;color:var(--tx);font-family:'DM Mono',monospace;font-size:13px;
+  outline:none;cursor:pointer;appearance:none;width:100%;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%235a6478' d='M5 6L0 0h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;}
+.fsel:focus{border-color:var(--ac);}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;border-radius:7px;
+  border:none;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;
+  letter-spacing:.02em;transition:all .2s;}
+.btn-p{background:var(--ac);color:#080b10;}
+.btn-p:hover{background:#00f5c8;box-shadow:0 0 18px rgba(0,221,180,.3);}
+.btn-p:disabled{opacity:.3;cursor:not-allowed;box-shadow:none;}
+.btn-s{background:transparent;color:var(--tx);border:1px solid var(--bd);}
+.btn-s:hover{border-color:var(--ac);color:var(--ac);}
+.brow{display:flex;gap:10px;margin-top:26px;align-items:center;}
+
+/* CANVAS */
+.cvwrap{position:relative;background:var(--sf2);border:1px solid var(--bd);border-radius:12px;overflow:hidden;line-height:0;}
+.cvbar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);flex-wrap:wrap;}
+.cvinfo{margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--mu);}
+#imageCanvas{display:block;cursor:crosshair;user-select:none;}
+.mbtn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid var(--bd);background:transparent;color:var(--mu);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .2s;}
+.mbtn.on{border-color:var(--ac);color:var(--ac);background:rgba(0,221,180,.08);}
+.mbtn.on.c2{border-color:var(--a2);color:var(--a2);background:rgba(255,107,107,.08);}
+.mbtn.calib{border-color:var(--a3);color:var(--a3);background:rgba(255,209,102,.07);}
+.cbadge{position:absolute;top:9px;right:9px;padding:4px 9px;background:rgba(8,11,16,.92);border:1px solid var(--bd);border-radius:5px;font-family:'DM Mono',monospace;font-size:10px;pointer-events:none;z-index:10;line-height:1.4;}
+
+/* POINTS LIST */
+.plist{max-height:240px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bd) transparent;}
+.pi{display:flex;align-items:center;justify-content:space-between;padding:5px 9px;border-radius:4px;margin-bottom:3px;background:var(--sf2);font-family:'DM Mono',monospace;font-size:11px;}
+.pb{padding:2px 7px;border-radius:3px;font-size:9px;font-weight:600;}
+.pb1{background:rgba(0,221,180,.15);color:var(--c1);}
+.pb2{background:rgba(255,107,107,.15);color:var(--c2);}
+
+/* AT RISK TABLE */
+.rt{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:12px;}
+.rt th{padding:8px 12px;text-align:left;color:var(--mu);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--bd);}
+.rt td{padding:6px 12px;border-bottom:1px solid rgba(34,40,53,.5);}
+.rt input{background:transparent;border:none;border-bottom:1px solid var(--bd);color:var(--tx);font-family:'DM Mono',monospace;font-size:12px;width:80px;outline:none;padding:2px 4px;transition:border-color .2s;}
+.rt input:focus{border-color:var(--ac);}
+.addb{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;background:transparent;border:1px dashed var(--bd);border-radius:5px;color:var(--mu);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;margin-top:10px;transition:all .2s;}
+.addb:hover{border-color:var(--ac);color:var(--ac);}
+
+/* METRICS */
+.mc{background:var(--sf);border:1px solid var(--bd);border-radius:11px;padding:18px 20px;}
+.mv{font-family:'DM Sans',sans-serif;font-size:26px;font-weight:700;line-height:1;margin-bottom:4px;}
+.ml{font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);letter-spacing:.12em;text-transform:uppercase;}
+.ms{font-size:11px;color:var(--mu);margin-top:3px;}
+
+/* CHART WRAPPER */
+.cw{background:var(--sf);border:1px solid var(--bd);border-radius:13px;padding:26px;}
+.cwt{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;margin-bottom:3px;}
+.cws{font-size:12px;color:var(--mu);margin-bottom:18px;}
+
+/* LEGEND */
+.leg{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.li{display:flex;align-items:center;gap:6px;font-size:12px;}
+.ld{width:20px;height:3px;border-radius:2px;flex-shrink:0;}
+.ldd{width:20px;height:3px;border-radius:2px;flex-shrink:0;opacity:.45;}
+
+/* INFO / WARN */
+.ib{display:flex;gap:11px;padding:13px 15px;background:rgba(0,221,180,.05);border:1px solid rgba(0,221,180,.17);border-radius:7px;margin-bottom:14px;font-size:12px;line-height:1.65;color:var(--mu);}
+.wb{display:flex;gap:11px;padding:13px 15px;background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.17);border-radius:7px;margin-bottom:14px;font-size:12px;line-height:1.65;color:var(--mu);}
+.ii{font-size:15px;flex-shrink:0;margin-top:1px;}
+
+/* SLIDERS */
+.sg{margin-bottom:16px;}
+.sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.sn{font-size:12px;font-weight:500;}
+.sv{font-family:'DM Mono',monospace;font-size:12px;color:var(--ac);}
+.sv.r{color:var(--a2);}
+input[type=range]{width:100%;-webkit-appearance:none;height:3px;border-radius:2px;background:var(--bd);outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ac);cursor:pointer;box-shadow:0 0 6px rgba(0,221,180,.5);}
+input[type=range].r::-webkit-slider-thumb{background:var(--a2);box-shadow:0 0 6px rgba(255,107,107,.5);}
+
+/* SENS TYPE */
+.strow{display:flex;gap:9px;margin-bottom:16px;}
+.stb{flex:1;padding:9px 7px;border-radius:7px;border:1px solid var(--bd);background:transparent;color:var(--mu);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;text-align:center;line-height:1.5;}
+.stb.tox{border-color:var(--a2);color:var(--a2);background:rgba(255,107,107,.06);}
+.stb.dis{border-color:var(--a3);color:var(--a3);background:rgba(255,209,102,.06);}
+
+/* SENS OUTPUT */
+.smo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;}
+.sm{padding:12px 14px;background:var(--sf2);border-radius:7px;border:1px solid var(--bd);}
+.sml{font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.12em;margin-bottom:3px;}
+.smv{font-family:'DM Sans',sans-serif;font-size:17px;font-weight:700;}
+.smo2{font-family:'DM Mono',monospace;font-size:10px;color:var(--mu);margin-top:2px;}
+
+/* RESULT TABLE */
+.rest{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px;}
+.rest th{padding:7px 11px;text-align:left;color:var(--mu);font-size:9px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--bd);}
+.rest td{padding:7px 11px;border-bottom:1px solid rgba(34,40,53,.4);}
+.rest tr:hover td{background:rgba(255,255,255,.013);}
+
+/* COLORS */
+.ag{color:var(--ac);} .ar{color:var(--a2);} .ay{color:var(--a3);} .ab{color:var(--a4);} .ap{color:var(--a5);}
+
+/* NOTIF */
+.notif{position:fixed;bottom:26px;right:26px;padding:11px 16px;background:var(--sf);border:1px solid var(--ac);border-radius:8px;font-size:12px;font-family:'DM Mono',monospace;z-index:1000;display:flex;align-items:center;gap:9px;animation:si .3s ease;max-width:340px;}
+.notif.err{border-color:var(--a2);}
+@keyframes si{from{transform:translateX(80px);opacity:0}to{transform:none;opacity:1}}
+
+/* MISC */
+.div{height:1px;background:var(--bd);margin:20px 0;}
+.fm{font-family:'DM Mono',monospace;font-size:11px;background:var(--sf2);padding:9px 13px;border-radius:6px;display:block;margin:8px 0;color:var(--tx);}
+.calib-g{padding:13px 15px;background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.18);border-radius:7px;font-size:12px;line-height:1.7;color:var(--mu);}
+
+/* OCR REGION SELECTOR */
+.ocr-wrap{position:relative;background:var(--sf2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;line-height:0;cursor:crosshair;user-select:none;}
+#ocrCanvas{display:block;max-width:100%;}
+.ocr-sel{position:absolute;border:2px solid var(--a3);background:rgba(255,209,102,.12);pointer-events:none;box-sizing:border-box;}
+.ocr-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);flex-wrap:wrap;}
+.ocr-status{font-family:'DM Mono',monospace;font-size:11px;color:var(--mu);margin-left:auto;}
+
+/* PRESET SCENARIOS */
+.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.preset-btn{padding:9px 10px;border-radius:7px;border:1px solid var(--bd);background:transparent;
+  color:var(--mu);font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;transition:all .2s;text-align:left;line-height:1.5;}
+.preset-btn:hover{border-color:var(--ac);color:var(--tx);}
+.preset-btn.saved{border-color:var(--a4);color:var(--a4);}
+.preset-name{font-weight:600;display:block;margin-bottom:2px;}
+.preset-detail{font-size:10px;opacity:.7;}
+
+/* SAVE PRESET */
+.save-row{display:flex;gap:8px;margin-top:12px;}
+.save-row input{flex:1;background:var(--sf2);border:1px solid var(--bd);border-radius:6px;
+  padding:7px 10px;color:var(--tx);font-family:'DM Mono',monospace;font-size:12px;outline:none;}
+.save-row input:focus{border-color:var(--ac);}
+
+::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px;}
+
+/* CI band styling via Chart.js - handled in JS */
+.ci-note{font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;margin-top:6px;}
+
+/* STAT BOX */
+.statbox{display:flex;gap:24px;align-items:center;flex-wrap:wrap;}
+.statitem{text-align:center;}
+.statv{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;}
+.statl{font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);letter-spacing:.1em;text-transform:uppercase;margin-top:3px;}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="logo">KM<em>Lens</em></div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="stepdots">
+      <div class="sd on" id="d0"></div>
+      <div class="sd" id="d1"></div>
+      <div class="sd" id="d2"></div>
+      <div class="sd" id="d3"></div>
+    </div>
+    <span class="slb" id="slb">Upload</span>
+  </div>
+</header>
+
+<div class="main">
+
+<!-- ══════════════════════════════
+     PANEL 0 — UPLOAD & AXES
+══════════════════════════════ -->
+<div class="panel on" id="p0">
+  <div class="hero">
+    <div class="sn">Step 01 / 04</div>
+    <div class="st">Upload your<br>KM curve image</div>
+    <div class="sd2">Import a Kaplan-Meier figure from any oncology publication. Then configure the axis ranges exactly as printed.</div>
+  </div>
+  <div class="g2">
+    <div>
+      <div class="card">
+        <div class="ct">Image</div>
+        <input type="file" accept="image/*" id="fileIn" style="display:none;">
+        <div class="uzone" id="uzone" onclick="document.getElementById('fileIn').click()">
+          <span class="uico">⬆</span>
+          <div class="utit">Drop image or click to browse</div>
+          <div class="usub">JPG · PNG · WEBP — screenshot from PDF for best quality</div>
+        </div>
+        <div id="prevWrap" style="display:none;">
+          <img id="prevImg" alt="KM curve preview">
+          <div style="margin-top:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--mu);" id="imgInfo"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="ct">Axis Configuration</div>
+        <div class="ib"><span class="ii">ℹ</span><span>Enter the numeric ranges as printed on the figure. You will set exact pixel calibration points in Step 2.</span></div>
+        <div style="margin-bottom:16px;">
+          <div class="fl" style="margin-bottom:9px;">X-axis (Time)</div>
+          <div class="g3" style="margin-bottom:10px;">
+            <div class="fg"><label class="fl">Start</label><input class="fi" type="number" id="xMin" value="0"></div>
+            <div class="fg"><label class="fl">End</label><input class="fi" type="number" id="xMax" value="60"></div>
+            <div class="fg"><label class="fl">Step</label><input class="fi" type="number" id="xStep" value="10"></div>
+          </div>
+          <div class="fg"><label class="fl">Unit</label>
+            <select class="fsel" id="xUnit"><option>months</option><option>years</option><option>days</option><option>weeks</option></select>
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div class="fl" style="margin-bottom:9px;">Y-axis (Survival Probability)</div>
+          <div class="g3">
+            <div class="fg"><label class="fl">Min</label><input class="fi" type="number" id="yMin" value="0" step="0.1"></div>
+            <div class="fg"><label class="fl">Max</label><input class="fi" type="number" id="yMax" value="1" step="0.1"></div>
+            <div class="fg"><label class="fl">Step</label><input class="fi" type="number" id="yStep" value="0.25" step="0.05"></div>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:13px;"><label class="fl">Number of groups</label>
+          <select class="fsel" id="nCurves" onchange="toggleC2Name()">
+            <option value="1">1 group</option>
+            <option value="2" selected>2 groups</option>
+          </select>
+        </div>
+        <div class="fg" style="margin-bottom:11px;"><label class="fl">Group 1 name <span class="ag">●</span></label><input class="fi" id="c1n" value="Experimental"></div>
+        <div class="fg" id="c2ng"><label class="fl">Group 2 name <span class="ar">●</span></label><input class="fi" id="c2n" value="Control"></div>
+      </div>
+      <div class="brow">
+        <button class="btn btn-p" id="toS1" disabled>Next: Digitize Curves →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 1 — CALIBRATE & DIGITIZE
+══════════════════════════════ -->
+<div class="panel" id="p1">
+  <div class="hero">
+    <div class="sn">Step 02 / 04</div>
+    <div class="st">Calibrate &<br>digitize curves</div>
+    <div class="sd2">Three calibration clicks lock the axis mapping. Then click along each curve to capture data points.</div>
+  </div>
+  <div class="g2w">
+    <div>
+      <div class="calib-g" id="calibGuide" style="margin-bottom:14px;">
+        <strong style="color:var(--a3);">Calibration mode.</strong><br>
+        <span id="calibTxt">Click 1/3 — Click on the <strong>plot origin</strong>: where x=0 and y=0 (or y=yMin) meet.</span>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="cvbar">
+          <button class="mbtn calib on" id="mbCalib" onclick="setMode('calib')">⊕ Calibrate</button>
+          <button class="mbtn" id="mbC1" onclick="setMode('c1')" style="display:none"><span class="ag">●</span> <span id="ml1">Exp</span></button>
+          <button class="mbtn" id="mbC2" onclick="setMode('c2')" style="display:none"><span class="ar">●</span> <span id="ml2">Ctrl</span></button>
+          <button class="mbtn" id="undoB" onclick="undoLast()" style="display:none">↩ Undo</button>
+          <button class="mbtn" id="clearB" onclick="clearMode()" style="display:none;color:var(--a2);border-color:rgba(255,107,107,.35)">✕ Clear</button>
+          <div class="cvinfo" id="cvInfo">Hover for coordinates</div>
+        </div>
+        <div class="cvwrap" id="cvwrap">
+          <canvas id="imageCanvas"></canvas>
+          <div class="cbadge" id="cbadge">⊕ Calibration — click 1/3</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="ct">Digitized Points</div>
+        <div class="leg">
+          <div class="li"><div class="ld" style="background:var(--c1)"></div><span id="ll1">Experimental</span></div>
+          <div class="li"><div class="ld" style="background:var(--c2)"></div><span id="ll2">Control</span></div>
+        </div>
+        <div class="plist" id="ptsList"><div style="color:var(--mu);font-size:12px;text-align:center;padding:16px;">Complete calibration first.</div></div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bd);display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:11px;color:var(--mu);">
+          <span>G1: <span id="c1cnt" class="ag">0</span> pts</span>
+          <span>G2: <span id="c2cnt" class="ar">0</span> pts</span>
+        </div>
+      </div>
+      <div class="card" id="calibStatusCard" style="display:none;margin-bottom:14px;">
+        <div class="ct">Calibration Points</div>
+        <div style="font-size:12px;color:var(--mu);line-height:1.9;">
+          <div>Origin (0, 0): <span id="cs0" class="ay">—</span></div>
+          <div>X-end (<span id="cs1x">?</span>, 0): <span id="cs1" class="ab">—</span></div>
+          <div>Y-top (0, <span id="cs2y">?</span>): <span id="cs2" class="ag">—</span></div>
+        </div>
+        <button class="mbtn calib" style="margin-top:11px;width:100%;justify-content:center;" onclick="resetCalib()">↺ Redo calibration</button>
+      </div>
+      <div class="brow">
+        <button class="btn btn-s" onclick="goTo(0)">← Back</button>
+        <button class="btn btn-p" id="toS2" disabled onclick="goTo(2)">Next: At Risk Table →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 2 — AT RISK TABLE
+══════════════════════════════ -->
+<div class="panel" id="p2">
+  <div class="hero">
+    <div class="sn">Step 03 / 04</div>
+    <div class="st">Number at<br>risk table</div>
+    <div class="sd2">Draw a box around the numbers-at-risk row in your figure to auto-detect values with OCR — then correct any errors in the table.</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start;">
+    <div>
+      <!-- OCR IMAGE -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="ct">Auto-detect from image</div>
+        <div class="wb"><span class="ii">⚠</span><span>Draw a rectangle around the <strong>numbers-at-risk row</strong> (the row of numbers below the x-axis). OCR will read them and fill the table. Always verify the result.</span></div>
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px;">
+          <div class="ocr-bar">
+            <button class="mbtn" id="ocrDrawBtn" onclick="startOcrDraw()" style="border-color:var(--a3);color:var(--a3);">⬚ Draw selection box</button>
+            <button class="mbtn" id="ocrRunBtn" onclick="runOcr()" style="display:none;border-color:var(--ac);color:var(--ac);">▶ Run OCR</button>
+            <button class="mbtn" id="ocrClearBtn" onclick="clearOcrSel()" style="display:none;">✕ Clear</button>
+            <div class="ocr-status" id="ocrStatus">Click "Draw selection box" then drag over the at-risk numbers</div>
+          </div>
+          <div class="ocr-wrap" id="ocrWrap">
+            <canvas id="ocrCanvas"></canvas>
+            <div class="ocr-sel" id="ocrSel" style="display:none;"></div>
+          </div>
+        </div>
+        <div id="ocrRawBox" style="display:none;margin-top:8px;">
+          <div class="fl" style="margin-bottom:6px;">OCR raw text (edit if needed, then click Parse)</div>
+          <textarea id="ocrRaw" style="width:100%;background:var(--sf2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--tx);font-family:'DM Mono',monospace;font-size:12px;outline:none;resize:vertical;min-height:60px;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn btn-p" onclick="parseOcrText(1)" style="flex:1;justify-content:center;">→ Parse into Group 1</button>
+            <button class="btn btn-s" onclick="parseOcrText(2)" style="flex:1;justify-content:center;" id="parseG2Btn">→ Parse into Group 2</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- AT RISK TABLE -->
+      <div class="card">
+        <div class="ct">At-Risk Values <span style="font-weight:400;color:var(--mu);font-size:10px;letter-spacing:0;text-transform:none;">— review and correct</span></div>
+        <div style="overflow-x:auto;">
+          <table class="rt" id="riskTbl">
+            <thead><tr>
+              <th>Time</th><th id="rh1"><span class="ag">●</span> Group 1</th><th id="rh2"><span class="ar">●</span> Group 2</th><th></th>
+            </tr></thead>
+            <tbody id="riskBody"></tbody>
+          </table>
+        </div>
+        <button class="addb" onclick="addRiskRow()">+ Add row</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="ct">Trial Details (optional)</div>
+        <div class="fg" style="margin-bottom:12px;"><label class="fl">Trial name</label><input class="fi" id="trialN" placeholder="e.g. KEYNOTE-522"></div>
+        <div class="fg"><label class="fl">Endpoint</label>
+          <select class="fsel" id="epType">
+            <option>OS</option><option>PFS</option><option>DFS</option><option>EFS</option><option>RFS</option><option>TTD</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct">Censoring Formula</div>
+        <div style="font-size:12px;color:var(--mu);line-height:1.8;">
+          For each interval <strong style="color:var(--tx);">[t₁, t₂]</strong>:
+          <code class="fm">Censorings = N(t₁) − N(t₂) − Events(t₁→t₂)</code>
+          where events are estimated from the curve:
+          <code class="fm">Events ≈ ⌊ N(t₁) × [S(t₁) − S(t₂)] / S(t₁) ⌋</code>
+          CI uses Greenwood's formula. Log-rank χ² gives the p-value.
+        </div>
+      </div>
+      <div class="brow">
+        <button class="btn btn-s" onclick="goTo(1)">← Back</button>
+        <button class="btn btn-p" onclick="calcAndGo()">Calculate & Analyse →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 3 — RESULTS
+══════════════════════════════ -->
+<div class="panel" id="p3">
+
+  <!-- compact page header, no giant hero -->
+  <div style="padding:24px 0 20px;border-bottom:1px solid var(--bd);margin-bottom:20px;display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--ac);letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;">Step 04 / 04</div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.3px;" id="p3Title">Censoring Analysis</div>
+    </div>
+    <!-- KEY STATS INLINE -->
+    <div id="statBar" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- ROW 1: metrics -->
+  <div class="g4" id="mGrid" style="margin-bottom:16px;"></div>
+
+  <!-- ROW 2: KM chart + censoring bar chart side by side, compact -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="cw" style="padding:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div class="cwt" style="font-size:13px;">KM Curves + 95% CI</div>
+        <div class="leg" id="kmLeg" style="margin:0;"></div>
+      </div>
+      <canvas id="kmChart" height="200"></canvas>
+    </div>
+    <div class="cw" style="padding:18px;">
+      <div class="cwt" style="font-size:13px;margin-bottom:4px;">Censoring by Interval</div>
+      <canvas id="censorChart" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- ROW 3: detail table + sensitivity side by side -->
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:16px;align-items:start;">
+
+    <!-- Left: interval table -->
+    <div class="card" style="padding:18px;">
+      <div class="ct" style="margin-bottom:12px;">Interval Breakdown</div>
+      <div style="overflow-x:auto;">
+        <table class="rest" id="detailTbl">
+          <thead><tr>
+            <th>Interval</th>
+            <th>N (G1)</th><th>Events (G1)</th><th class="ag">Censored (G1)</th><th>%</th>
+            <th>N (G2)</th><th>Events (G2)</th><th class="ar">Censored (G2)</th><th>%</th>
+          </tr></thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right: sensitivity panel -->
+    <div class="card" style="padding:18px;">
+      <div class="ct" style="margin-bottom:10px;">Sensitivity Analysis</div>
+
+      <!-- Presets -->
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);letter-spacing:.12em;text-transform:uppercase;margin-bottom:7px;">Scenarios</div>
+      <div class="preset-grid" id="presetGrid"></div>
+      <div class="save-row" style="margin-bottom:12px;">
+        <input type="text" id="presetNameIn" placeholder="Name & save current…" maxlength="40">
+        <button class="mbtn" onclick="savePreset()" style="border-color:var(--ac);color:var(--ac);white-space:nowrap;padding:6px 10px;">💾</button>
+      </div>
+
+      <div style="height:1px;background:var(--bd);margin:10px 0;"></div>
+
+      <!-- Type toggle -->
+      <div class="strow" style="margin-bottom:10px;">
+        <button class="stb tox" id="toxB" onclick="setCType('tox')">⚠ Toxicity<br><small style="font-size:9px;opacity:.7">→ Events</small></button>
+        <button class="stb" id="disB" onclick="setCType('dis')">😞 Disappoint.<br><small style="font-size:9px;opacity:.7">→ Late censor</small></button>
+      </div>
+
+      <!-- Sliders -->
+      <div class="sg" style="margin-bottom:10px;">
+        <div class="sh"><span class="sn" style="font-size:11px;"><span class="ag">●</span> <span id="sl1">G1</span></span><span class="sv" id="sv1">0%</span></div>
+        <input type="range" min="0" max="100" value="0" id="s1" oninput="updateSens()">
+      </div>
+      <div class="sg" style="margin-bottom:12px;">
+        <div class="sh"><span class="sn" style="font-size:11px;"><span class="ar">●</span> <span id="sl2">G2</span></span><span class="sv r" id="sv2">0%</span></div>
+        <input type="range" class="r" min="0" max="100" value="0" id="s2" oninput="updateSens()">
+      </div>
+
+      <!-- Adjusted stats output -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div class="sm"><div class="sml">Adj. HR</div><div class="smv" id="aHR">—</div><div class="smo2" id="oHR">—</div></div>
+        <div class="sm"><div class="sml">p-value</div><div class="smv" id="aPV" style="font-size:13px;">—</div><div class="smo2" id="oPV">—</div></div>
+        <div class="sm"><div class="sml">Med G1</div><div class="smv" id="aM1">—</div><div class="smo2" id="oM1">—</div></div>
+        <div class="sm"><div class="sml">Med G2</div><div class="smv" id="aM2">—</div><div class="smo2" id="oM2">—</div></div>
+      </div>
+      <div class="sm" style="margin-bottom:10px;">
+        <div class="sml">Concern</div>
+        <div class="smv" style="font-size:13px;" id="concern">—</div>
+        <div class="smo2" id="concernD">—</div>
+      </div>
+      <button class="btn btn-s" style="width:100%;justify-content:center;padding:7px;" onclick="resetSens()">Reset</button>
+    </div>
+  </div>
+
+  <!-- ROW 4: adjusted KM chart full width -->
+  <div class="cw" style="padding:18px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+      <div class="cwt" style="font-size:13px;">Adjusted KM Curves</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div class="leg" id="adjLeg" style="margin:0;"></div>
+        <div style="font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;" id="adjSub">No adjustments applied</div>
+      </div>
+    </div>
+    <canvas id="adjChart" height="200"></canvas>
+  </div>
+
+  <div class="brow">
+    <button class="btn btn-s" onclick="goTo(2)">← Back</button>
+    <button class="btn btn-p" onclick="doExport()">⬇ Export CSV</button>
+    <button class="btn btn-s" onclick="startOver()">New Analysis</button>
+  </div>
+</div>
+
+
+</div><!-- /.main -->
+<div class="notif" id="notif" style="display:none;"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+const S = {
+  step:0, imgEl:null, imgW:0, imgH:0,
+  ax:{xMin:0,xMax:60,xStep:10,xUnit:'months',yMin:0,yMax:1,yStep:0.25},
+  nC:2, names:['Experimental','Control'],
+  pts:{c1:[],c2:[]},
+  mode:'calib',
+  calib:{done:false,pts:[],step:0},
+  bounds:null,  // {x0px,x1px,y0py,y1py}
+  risk:[],
+  res:null,
+  ctype:'tox',
+  charts:{}
+};
+
+
+// ═══════════════════════════════════════════════════
+//  OCR — NUMBER AT RISK DETECTION
+// ═══════════════════════════════════════════════════
+let ocrState = { drawing:false, startX:0, startY:0, selX:0, selY:0, selW:0, selH:0, hasSel:false };
+
+function initOcrCanvas(){
+  const ocrCv = document.getElementById('ocrCanvas');
+  if(!ocrCv || !S.imgEl) return;
+  const wrap = document.getElementById('ocrWrap');
+  const maxW = wrap.offsetWidth || 700;
+  const ratio = Math.min(maxW / S.imgW, 1);
+  ocrCv.width  = Math.round(S.imgW * ratio);
+  ocrCv.height = Math.round(S.imgH * ratio);
+  ocrCv._ratio = ratio;
+  const cx2 = ocrCv.getContext('2d');
+  cx2.drawImage(S.imgEl, 0, 0, ocrCv.width, ocrCv.height);
+  clearOcrSel();
+}
+
+function startOcrDraw(){
+  const ocrCv = document.getElementById('ocrCanvas');
+  ocrCv.style.cursor = 'crosshair';
+  ocrState.drawing = false;
+  ocrState.hasSel  = false;
+  document.getElementById('ocrSel').style.display = 'none';
+  document.getElementById('ocrRunBtn').style.display   = 'none';
+  document.getElementById('ocrClearBtn').style.display = 'none';
+  document.getElementById('ocrRawBox').style.display   = 'none';
+  document.getElementById('ocrStatus').textContent = 'Drag to select the numbers-at-risk row';
+
+  ocrCv.onmousedown = e => {
+    const r = ocrCv.getBoundingClientRect();
+    ocrState.startX = e.clientX - r.left;
+    ocrState.startY = e.clientY - r.top;
+    ocrState.drawing = true;
+  };
+  ocrCv.onmousemove = e => {
+    if(!ocrState.drawing) return;
+    const r = ocrCv.getBoundingClientRect();
+    const cx = e.clientX - r.left, cy = e.clientY - r.top;
+    const x = Math.min(cx, ocrState.startX), y = Math.min(cy, ocrState.startY);
+    const w = Math.abs(cx - ocrState.startX), h = Math.abs(cy - ocrState.startY);
+    const sel = document.getElementById('ocrSel');
+    sel.style.display = 'block';
+    sel.style.left   = x + 'px'; sel.style.top    = y + 'px';
+    sel.style.width  = w + 'px'; sel.style.height = h + 'px';
+    ocrState.selX = x; ocrState.selY = y; ocrState.selW = w; ocrState.selH = h;
+  };
+  ocrCv.onmouseup = e => {
+    if(!ocrState.drawing) return;
+    ocrState.drawing = false;
+    ocrCv.style.cursor = 'default';
+    ocrCv.onmousedown = null; ocrCv.onmousemove = null; ocrCv.onmouseup = null;
+    if(ocrState.selW > 20 && ocrState.selH > 5){
+      ocrState.hasSel = true;
+      document.getElementById('ocrRunBtn').style.display   = 'flex';
+      document.getElementById('ocrClearBtn').style.display = 'flex';
+      document.getElementById('ocrStatus').textContent = `Selection: ${Math.round(ocrState.selW)}×${Math.round(ocrState.selH)}px — click Run OCR`;
+    } else {
+      document.getElementById('ocrStatus').textContent = 'Selection too small — try again';
+    }
+  };
+}
+
+function clearOcrSel(){
+  ocrState = { drawing:false, startX:0, startY:0, selX:0, selY:0, selW:0, selH:0, hasSel:false };
+  document.getElementById('ocrSel').style.display   = 'none';
+  document.getElementById('ocrRunBtn').style.display   = 'none';
+  document.getElementById('ocrClearBtn').style.display = 'none';
+  document.getElementById('ocrRawBox').style.display   = 'none';
+  document.getElementById('ocrStatus').textContent = 'Click "Draw selection box" then drag';
+}
+
+async function runOcr(){
+  if(!ocrState.hasSel){ notify('Draw a selection first',true); return; }
+  document.getElementById('ocrStatus').textContent = '⏳ Running OCR…';
+  document.getElementById('ocrRunBtn').disabled = true;
+
+  try {
+    // Crop the selected region from the original image at full resolution
+    const ratio = document.getElementById('ocrCanvas')._ratio || 1;
+    const x = Math.round(ocrState.selX / ratio);
+    const y = Math.round(ocrState.selY / ratio);
+    const w = Math.round(ocrState.selW / ratio);
+    const h = Math.round(ocrState.selH / ratio);
+
+    // Draw cropped region to a temp canvas
+    const tmp = document.createElement('canvas');
+    // Scale up for better OCR accuracy
+    const scale = Math.min(4, 2000 / w);
+    tmp.width  = Math.round(w * scale);
+    tmp.height = Math.round(h * scale);
+    const tc = tmp.getContext('2d');
+    // Sharpen: white background, high contrast
+    tc.fillStyle = '#ffffff';
+    tc.fillRect(0, 0, tmp.width, tmp.height);
+    tc.drawImage(S.imgEl, x, y, w, h, 0, 0, tmp.width, tmp.height);
+
+    const worker = await Tesseract.createWorker('eng');
+    await worker.setParameters({
+      tessedit_char_whitelist: '0123456789 	
+',
+      preserve_interword_spaces: '1'
+    });
+    const { data: { text } } = await worker.recognize(tmp);
+    await worker.terminate();
+
+    const cleaned = text.replace(/[^0-9 \n\t]/g, ' ').replace(/\s+/g, ' ').trim();
+    document.getElementById('ocrRaw').value = cleaned;
+    document.getElementById('ocrRawBox').style.display = 'block';
+    document.getElementById('ocrStatus').textContent = '✓ OCR complete — review text above then parse';
+    if(S.nC===1) document.getElementById('parseG2Btn').style.display='none';
+  } catch(err){
+    document.getElementById('ocrStatus').textContent = '⚠ OCR failed: ' + err.message;
+    notify('OCR error — try a cleaner selection', true);
+  }
+  document.getElementById('ocrRunBtn').disabled = false;
+}
+
+function parseOcrText(group){
+  const raw = document.getElementById('ocrRaw').value;
+  // Extract all numbers
+  const nums = raw.match(/\d+/g);
+  if(!nums || nums.length === 0){ notify('No numbers found in OCR text', true); return; }
+
+  // Fill into risk table rows
+  const key = group === 1 ? 'n1' : 'n2';
+  nums.forEach((n, i) => {
+    if(i < S.risk.length) S.risk[i][key] = n;
+  });
+  // If more numbers than rows, add rows
+  if(nums.length > S.risk.length){
+    notify(`OCR found ${nums.length} values but table has ${S.risk.length} rows — extra values ignored`, true);
+  }
+  renderRiskTable();
+  notify(`✓ Parsed ${Math.min(nums.length, S.risk.length)} values into Group ${group}`);
+}
+
+// ═══════════════════════════════════════════════════
+//  SENSITIVITY PRESETS — localStorage
+// ═══════════════════════════════════════════════════
+const BUILTIN_PRESETS = [
+  { name:'Mild toxicity',    detail:'5% G1 / 0% G2',  type:'tox', s1:5,  s2:0  },
+  { name:'Moderate toxicity',detail:'10% G1 / 5% G2', type:'tox', s1:10, s2:5  },
+  { name:'Disappointment',   detail:'0% G1 / 10% G2', type:'dis', s1:0,  s2:10 },
+  { name:'Balanced concern', detail:'10% G1 / 10% G2',type:'tox', s1:10, s2:10 },
+];
+
+function loadPresets(){
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('kmlens_presets') || '[]'); } catch(e){}
+  return saved;
+}
+
+function savePreset(){
+  const name = document.getElementById('presetNameIn').value.trim();
+  if(!name){ notify('Enter a name for the scenario', true); return; }
+  const p = {
+    name, detail: `${document.getElementById('sv1').textContent} G1 / ${document.getElementById('sv2').textContent} G2`,
+    type: S.ctype,
+    s1: +document.getElementById('s1').value,
+    s2: +document.getElementById('s2').value,
+    saved: true
+  };
+  const presets = loadPresets();
+  // Replace if name exists
+  const idx = presets.findIndex(x => x.name === name);
+  if(idx >= 0) presets[idx] = p; else presets.push(p);
+  try {
+    localStorage.setItem('kmlens_presets', JSON.stringify(presets));
+    document.getElementById('presetNameIn').value = '';
+    renderPresets();
+    notify('✓ Scenario "' + name + '" saved');
+  } catch(e){ notify('Could not save — localStorage unavailable', true); }
+}
+
+function deletePreset(name){
+  const presets = loadPresets().filter(p => p.name !== name);
+  localStorage.setItem('kmlens_presets', JSON.stringify(presets));
+  renderPresets();
+}
+
+function applyPreset(p){
+  setCType(p.type);
+  document.getElementById('s1').value = p.s1;
+  document.getElementById('s2').value = p.s2;
+  updateSens();
+}
+
+function renderPresets(){
+  const grid = document.getElementById('presetGrid');
+  if(!grid) return;
+  const saved = loadPresets();
+  const all = [...BUILTIN_PRESETS, ...saved];
+  if(all.length === 0){
+    grid.innerHTML = '<div style="color:var(--mu);font-size:11px;grid-column:1/-1;">No saved scenarios.</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  all.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn' + (p.saved ? ' saved' : '');
+    btn.innerHTML = `<span class="preset-name">${p.name}</span><span class="preset-detail">${p.detail}</span>`;
+    btn.onclick = () => applyPreset(p);
+    if(p.saved){
+      const del = document.createElement('span');
+      del.textContent = ' 🗑';
+      del.style.cssText = 'cursor:pointer;float:right;font-size:11px;';
+      del.onclick = e => { e.stopPropagation(); deletePreset(p.name); };
+      btn.querySelector('.preset-detail').appendChild(del);
+    }
+    grid.appendChild(btn);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════
+function goTo(n){
+  document.getElementById('p'+S.step).classList.remove('on');
+  S.step=n;
+  document.getElementById('p'+n).classList.add('on');
+  ['Upload','Digitize','At Risk','Analysis'].forEach((l,i)=>{
+    const d=document.getElementById('d'+i);
+    d.className='sd'+(i===n?' on':i<n?' done':'');
+  });
+  document.getElementById('slb').textContent=['Upload','Digitize','At Risk','Analysis'][n];
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(n===1) initCanvas();
+  if(n===2) { setTimeout(initOcrCanvas, 50); }
+  if(n===3) { renderResults(); renderPresets(); }
+}
+
+// ═══════════════════════════════════════════════════
+//  STEP 0 — UPLOAD
+// ═══════════════════════════════════════════════════
+function loadImageFile(file){
+  if(!file) return;
+  if(!file.type.match(/^image\//)){
+    notify('⚠ Please upload an image file (JPG, PNG, WEBP)',true); return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    const dataURL = evt.target.result;
+    const img = new Image();
+    img.onload = ()=>{
+      S.imgEl=img; S.imgW=img.naturalWidth; S.imgH=img.naturalHeight;
+      document.getElementById('prevImg').src=dataURL;
+      document.getElementById('prevWrap').style.display='block';
+      document.getElementById('imgInfo').textContent=`${S.imgW} × ${S.imgH} px`;
+      document.getElementById('toS1').disabled=false;
+      notify('✓ Image loaded ('+S.imgW+'×'+S.imgH+'px)');
+    };
+    img.onerror=()=>notify('⚠ Could not load image',true);
+    img.src=dataURL;
+  };
+  reader.onerror=()=>notify('⚠ File read failed',true);
+  reader.readAsDataURL(file);
+}
+
+const fileIn = document.getElementById('fileIn');
+fileIn.onchange = function(){ if(this.files && this.files[0]) loadImageFile(this.files[0]); };
+
+const uz = document.getElementById('uzone');
+uz.addEventListener('dragover',  e=>{ e.preventDefault(); uz.classList.add('over'); });
+uz.addEventListener('dragleave', ()=>{ uz.classList.remove('over'); });
+uz.addEventListener('drop', e=>{
+  e.preventDefault(); uz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if(f) loadImageFile(f);
+});
+
+document.getElementById('toS1').addEventListener('click',()=>{
+  S.ax.xMin=+document.getElementById('xMin').value||0;
+  S.ax.xMax=+document.getElementById('xMax').value||60;
+  S.ax.xStep=+document.getElementById('xStep').value||10;
+  S.ax.xUnit=document.getElementById('xUnit').value;
+  S.ax.yMin=+document.getElementById('yMin').value||0;
+  S.ax.yMax=+document.getElementById('yMax').value||1;
+  S.ax.yStep=+document.getElementById('yStep').value||0.25;
+  S.nC=+document.getElementById('nCurves').value;
+  S.names[0]=document.getElementById('c1n').value||'Group 1';
+  S.names[1]=document.getElementById('c2n').value||'Group 2';
+  syncLabels(); initRiskTable(); goTo(1);
+});
+
+function toggleC2Name(){
+  document.getElementById('c2ng').style.display=document.getElementById('nCurves').value==='1'?'none':'flex';
+}
+
+function syncLabels(){
+  [['ml1','ll1','sl1'],['ml2','ll2','sl2']].forEach(([a,b,c],i)=>{
+    [a,b,c].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=S.names[i]; });
+  });
+  document.getElementById('rh1').innerHTML=`<span class="ag">●</span> ${S.names[0]}`;
+  document.getElementById('rh2').innerHTML=`<span class="ar">●</span> ${S.names[1]}`;
+}
+
+// ═══════════════════════════════════════════════════
+//  STEP 1 — CANVAS / CALIBRATION
+// ═══════════════════════════════════════════════════
+let cv, cx;
+
+function initCanvas(){
+  cv=document.getElementById('imageCanvas');
+  cx=cv.getContext('2d');
+  if(!S.imgEl) return;
+
+  // Size canvas to fit viewport
+  const wrap=document.getElementById('cvwrap');
+  const maxW=wrap.offsetWidth||800;
+  const maxH=Math.min(window.innerHeight*0.65,680);
+  const ratio=Math.min(maxW/S.imgW, maxH/S.imgH, 1);
+  cv.width=Math.round(S.imgW*ratio);
+  cv.height=Math.round(S.imgH*ratio);
+  S.scale=ratio;
+
+  cv.onclick=onCvClick;
+  cv.onmousemove=onCvMove;
+  cv.oncontextmenu=e=>{e.preventDefault();undoLast();};
+
+  if(!S.calib.done){ S.calib={done:false,pts:[],step:0}; S.bounds=null; }
+  setMode('calib');
+  draw();
+}
+
+const CALIB_INST=[
+  'Click 1/3 — Click the <strong>plot origin</strong>: where x=0 and y=0 (or yMin) intersect.',
+  'Click 2/3 — Click on the <strong>rightmost x-axis tick</strong> (x=xMax), same y as origin.',
+  'Click 3/3 — Click on the <strong>topmost y-axis tick</strong> (y=yMax), same x as origin. ✓'
+];
+
+function onCvMove(e){
+  if(S.mode==='calib'){
+    document.getElementById('cvInfo').textContent=`pixel (${Math.round(e.offsetX)}, ${Math.round(e.offsetY)})`;
+  } else {
+    const {x,y}=px2ax(e.offsetX,e.offsetY);
+    document.getElementById('cvInfo').textContent=`t=${x.toFixed(2)} ${S.ax.xUnit}  S=${y.toFixed(3)}`;
+  }
+}
+
+function onCvClick(e){
+  if(S.mode==='calib'){ doCalib(e.offsetX,e.offsetY); return; }
+  const {x,y}=px2ax(e.offsetX,e.offsetY);
+  const xc=clamp(x,S.ax.xMin,S.ax.xMax), yc=clamp(y,S.ax.yMin,S.ax.yMax);
+  S.pts[S.mode].push({px:e.offsetX,py:e.offsetY,x:xc,y:yc});
+  draw(); syncPtsList(); checkStep2Btn();
+}
+
+function doCalib(px,py){
+  const step=S.calib.step;
+  const axmap=[
+    {ax:S.ax.xMin,ay:S.ax.yMin},
+    {ax:S.ax.xMax,ay:S.ax.yMin},
+    {ax:S.ax.xMin,ay:S.ax.yMax}
+  ];
+  S.calib.pts[step]={px,py,...axmap[step]};
+  S.calib.step++;
+  draw();
+  if(S.calib.step<3){
+    document.getElementById('calibTxt').innerHTML=CALIB_INST[S.calib.step];
+    document.getElementById('cbadge').textContent=`⊕ Calibration — click ${S.calib.step+1}/3`;
+  } else {
+    finishCalib();
+  }
+}
+
+function finishCalib(){
+  S.calib.done=true;
+  const [p0,p1,p2]=S.calib.pts;
+  S.bounds={x0px:p0.px, x1px:p1.px, y0py:p0.py, y1py:p2.py};
+
+  document.getElementById('calibStatusCard').style.display='block';
+  document.getElementById('cs1x').textContent=S.ax.xMax;
+  document.getElementById('cs2y').textContent=S.ax.yMax;
+  document.getElementById('cs0').textContent=`✓ (${Math.round(p0.px)}, ${Math.round(p0.py)})`;
+  document.getElementById('cs1').textContent=`✓ (${Math.round(p1.px)}, ${Math.round(p1.py)})`;
+  document.getElementById('cs2').textContent=`✓ (${Math.round(p2.px)}, ${Math.round(p2.py)})`;
+  document.getElementById('calibGuide').innerHTML='<span class="ag">✓ Calibration complete.</span> Select a group in the toolbar and click along the curve.';
+  document.getElementById('mbCalib').style.display='none';
+  document.getElementById('mbC1').style.display='flex';
+  if(S.nC===2) document.getElementById('mbC2').style.display='flex';
+  document.getElementById('undoB').style.display='flex';
+  document.getElementById('clearB').style.display='flex';
+  setMode('c1');
+  notify('✓ Calibration set — now digitize curves');
+}
+
+function resetCalib(){
+  S.calib={done:false,pts:[],step:0}; S.bounds=null;
+  S.pts={c1:[],c2:[]};
+  document.getElementById('calibGuide').innerHTML='<strong style="color:var(--a3);">Calibration mode.</strong><br><span id="calibTxt">'+CALIB_INST[0]+'</span>';
+  document.getElementById('calibStatusCard').style.display='none';
+  document.getElementById('mbCalib').style.display='flex';
+  document.getElementById('mbC1').style.display='none';
+  document.getElementById('mbC2').style.display='none';
+  document.getElementById('undoB').style.display='none';
+  document.getElementById('clearB').style.display='none';
+  setMode('calib'); draw(); syncPtsList(); checkStep2Btn();
+}
+
+function px2ax(px,py){
+  if(S.bounds){
+    const {x0px,x1px,y0py,y1py}=S.bounds;
+    const xf=(px-x0px)/(x1px-x0px);
+    const yf=(py-y1py)/(y0py-y1py); // y1py=top=yMax, y0py=bottom=yMin
+    return {
+      x:S.ax.xMin+xf*(S.ax.xMax-S.ax.xMin),
+      y:S.ax.yMin+yf*(S.ax.yMax-S.ax.yMin)
+    };
+  }
+  // Fallback estimate
+  const L=cv.width*.10,R=cv.width*.96,T=cv.height*.04,B=cv.height*.88;
+  return {
+    x:S.ax.xMin+(px-L)/(R-L)*(S.ax.xMax-S.ax.xMin),
+    y:S.ax.yMax-(py-T)/(B-T)*(S.ax.yMax-S.ax.yMin)
+  };
+}
+
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+
+function setMode(m){
+  S.mode=m;
+  ['mbCalib','mbC1','mbC2'].forEach(id=>{
+    const b=document.getElementById(id); if(b){ b.classList.remove('on','c2','calib'); }
+  });
+  if(m==='calib'){
+    const b=document.getElementById('mbCalib'); if(b) b.classList.add('on','calib');
+    document.getElementById('cbadge').textContent=`⊕ Calibration — click ${S.calib.step+1}/3`;
+  } else if(m==='c1'){
+    document.getElementById('mbC1').classList.add('on');
+    document.getElementById('cbadge').innerHTML=`<span class="ag">●</span> ${S.names[0]}`;
+  } else {
+    document.getElementById('mbC2').classList.add('on','c2');
+    document.getElementById('cbadge').innerHTML=`<span class="ar">●</span> ${S.names[1]}`;
+  }
+}
+
+function undoLast(){
+  if(S.mode==='c1'&&S.pts.c1.length) S.pts.c1.pop();
+  else if(S.mode==='c2'&&S.pts.c2.length) S.pts.c2.pop();
+  draw(); syncPtsList(); checkStep2Btn();
+}
+
+function clearMode(){
+  if(S.mode==='c1') S.pts.c1=[];
+  else if(S.mode==='c2') S.pts.c2=[];
+  draw(); syncPtsList(); checkStep2Btn();
+}
+
+function draw(){
+  if(!S.imgEl||!cv) return;
+  cx.clearRect(0,0,cv.width,cv.height);
+  cx.drawImage(S.imgEl,0,0,cv.width,cv.height);
+  // Calibration points
+  const cols=['#ffd166','#7c9eff','#00ddb4'];
+  S.calib.pts.forEach((p,i)=>{
+    cx.strokeStyle=cols[i]; cx.fillStyle=cols[i]; cx.lineWidth=2.5;
+    cx.beginPath(); cx.arc(p.px,p.py,6,0,Math.PI*2); cx.stroke();
+    cx.beginPath(); cx.moveTo(p.px-8,p.py); cx.lineTo(p.px+8,p.py); cx.moveTo(p.px,p.py-8); cx.lineTo(p.px,p.py+8); cx.stroke();
+  });
+  if(S.calib.pts.length===3){
+    const [p0,p1,p2]=S.calib.pts;
+    cx.setLineDash([4,4]); cx.lineWidth=1; cx.strokeStyle='rgba(255,209,102,.3)';
+    cx.beginPath(); cx.moveTo(p2.px,p2.py); cx.lineTo(p0.px,p0.py); cx.lineTo(p1.px,p1.py); cx.stroke();
+    cx.setLineDash([]);
+  }
+  drawCurve(S.pts.c1,'#00ddb4');
+  if(S.nC===2) drawCurve(S.pts.c2,'#ff6b6b');
+}
+
+function drawCurve(pts,col){
+  if(!pts.length) return;
+  const s=[...pts].sort((a,b)=>a.x-b.x);
+  cx.strokeStyle=col; cx.lineWidth=2; cx.setLineDash([]);
+  cx.beginPath(); s.forEach((p,i)=>i===0?cx.moveTo(p.px,p.py):cx.lineTo(p.px,p.py)); cx.stroke();
+  s.forEach(p=>{ cx.fillStyle=col; cx.beginPath(); cx.arc(p.px,p.py,3.5,0,Math.PI*2); cx.fill(); cx.strokeStyle='#080b10'; cx.lineWidth=1.5; cx.stroke(); });
+}
+
+function syncPtsList(){
+  const list=document.getElementById('ptsList');
+  const all=[...S.pts.c1.map(p=>({...p,g:'c1'})),...S.pts.c2.map(p=>({...p,g:'c2'}))].sort((a,b)=>a.x-b.x);
+  list.innerHTML=all.length?all.map(p=>`
+    <div class="pi"><span class="pb ${p.g==='c1'?'pb1':'pb2'}">${S.names[p.g==='c1'?0:1]}</span>
+    <span>t=${p.x.toFixed(2)}</span><span>S=${p.y.toFixed(3)}</span></div>`).join('')
+    :'<div style="color:var(--mu);font-size:12px;text-align:center;padding:14px;">No points yet.</div>';
+  document.getElementById('c1cnt').textContent=S.pts.c1.length;
+  document.getElementById('c2cnt').textContent=S.pts.c2.length;
+}
+
+function checkStep2Btn(){
+  document.getElementById('toS2').disabled=!(S.pts.c1.length>=2&&(S.nC===1||S.pts.c2.length>=2));
+}
+
+
+
+// ═══════════════════════════════════════════════════
+//  STEP 2 — AT RISK TABLE
+// ═══════════════════════════════════════════════════
+function initRiskTable(){
+  S.risk=[];
+  for(let t=S.ax.xMin;t<=S.ax.xMax+1e-9;t+=S.ax.xStep)
+    S.risk.push({t:+t.toFixed(6),n1:'',n2:''});
+  renderRiskTable();
+}
+
+function renderRiskTable(){
+  document.getElementById('riskBody').innerHTML=S.risk.map((r,i)=>`
+    <tr>
+      <td><input type="number" value="${r.t}" onchange="S.risk[${i}].t=+this.value||0" style="width:65px;"></td>
+      <td><input type="number" value="${r.n1}" placeholder="—" onchange="S.risk[${i}].n1=this.value" id="rn1_${i}"></td>
+      ${S.nC===2?`<td><input type="number" value="${r.n2}" placeholder="—" onchange="S.risk[${i}].n2=this.value" id="rn2_${i}"></td>`:'<td></td>'}
+      <td><span style="cursor:pointer;color:var(--mu);padding:2px 6px;" onclick="rmRow(${i})">✕</span></td>
+    </tr>`).join('');
+}
+
+function addRiskRow(){
+  const last=S.risk.length?S.risk[S.risk.length-1].t:0;
+  S.risk.push({t:+(last+S.ax.xStep).toFixed(6),n1:'',n2:''});
+  renderRiskTable();
+}
+
+function rmRow(i){ S.risk.splice(i,1); renderRiskTable(); }
+
+function syncRiskDOM(){
+  S.risk.forEach((r,i)=>{
+    const a=document.getElementById(`rn1_${i}`),b=document.getElementById(`rn2_${i}`);
+    if(a) r.n1=a.value; if(b) r.n2=b.value;
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  CORE STATISTICS
+// ═══════════════════════════════════════════════════
+
+// --- KM survival function from digitized stepped points ---
+function survAt(pts,t){
+  const s=[...pts].sort((a,b)=>a.x-b.x);
+  if(!s.length) return 1;
+  for(let i=s.length-1;i>=0;i--) if(s[i].x<=t) return s[i].y;
+  return s[0].y;
+}
+
+function medianSurv(pts){
+  const s=[...pts].sort((a,b)=>a.x-b.x);
+  for(let i=0;i<s.length-1;i++){
+    if(s[i].y>=0.5&&s[i+1].y<0.5){
+      const f=(0.5-s[i].y)/(s[i+1].y-s[i].y);
+      return +(s[i].x+f*(s[i+1].x-s[i].x)).toFixed(1);
+    }
+  }
+  if(s.length&&s[s.length-1].y>=0.5) return '>'+S.ax.xMax;
+  return 'NR';
+}
+
+// --- Greenwood 95% CI for a given survival curve + event/N per interval ---
+// Returns array of {t, s, lo, hi} over the time grid
+function greenwoodCI(pts, intervals, groupKey){
+  const sorted=[...pts].sort((a,b)=>a.x-b.x);
+  if(!sorted.length) return [];
+
+  // Build the survival estimate at each event time
+  // We use the actual digitized points as our survival estimate
+  // Greenwood: Var[log(-log S)] = sum(d/(n*(n-d))) over events up to t
+  // 95% CI: S^exp(±1.96*se/log(S))
+  let cumVar=0;
+  const result=[];
+
+  sorted.forEach((p,i)=>{
+    // Find which interval this point falls in
+    let nAtRisk=null, events=null;
+    for(const iv of intervals){
+      if(p.x>=iv.t1&&p.x<=iv.t2){
+        if(groupKey==='c1'){nAtRisk=iv.n1s;events=iv.e1;}
+        else {nAtRisk=iv.n2s;events=iv.e2;}
+        break;
+      }
+    }
+    if(nAtRisk&&events&&nAtRisk>events&&events>0){
+      cumVar += events/(nAtRisk*(nAtRisk-events));
+    }
+    const s=Math.max(1e-6,p.y);
+    const se=Math.sqrt(cumVar);
+    const loglogS=Math.log(-Math.log(s));
+    const z=1.96;
+    const loCHL=Math.exp(-Math.exp(loglogS+z*se));
+    const hiCHL=Math.exp(-Math.exp(loglogS-z*se));
+    result.push({t:p.x,s:p.y,lo:Math.max(0,Math.min(1,loCHL)),hi:Math.max(0,Math.min(1,hiCHL))});
+  });
+  return result;
+}
+
+// --- Log-rank test & HR via O/E method ---
+// Returns {hr, hrLo, hrHi, chiSq, p, logRankO1, logRankE1}
+function logRankTest(intervals){
+  let O1=0,E1=0,O2=0,E2=0;
+  let varSum=0;
+
+  for(const iv of intervals){
+    const n1=iv.n1s, n2=iv.n2s, d1=iv.e1, d2=iv.e2;
+    const N=n1+n2, D=d1+d2;
+    if(N<=0||D<=0) continue;
+    O1+=d1; O2+=d2;
+    const e1=N>0?D*n1/N:0;
+    E1+=e1; E2+=D-e1;
+    // Mantel-Haenszel variance
+    if(N>1) varSum += D*n1*n2*(N-D)/(N*N*(N-1));
+  }
+
+  const hr = (E1>0&&E2>0) ? (O1/E1)/(O2/E2) : null;
+  // Peto HR: exp((O1-E1)/V) — more standard
+  const petoHR = varSum>0 ? Math.exp((O1-E1)/varSum) : null;
+  const chiSq = varSum>0 ? Math.pow(O1-E1,2)/varSum : null;
+  const p = chiSq!==null ? chi2pvalue(chiSq,1) : null;
+
+  // 95% CI for Peto HR via variance
+  const hrLo = (petoHR&&varSum>0) ? petoHR*Math.exp(-1.96/Math.sqrt(varSum)) : null;
+  const hrHi = (petoHR&&varSum>0) ? petoHR*Math.exp(+1.96/Math.sqrt(varSum)) : null;
+
+  return {hr:petoHR, hrLo, hrHi, chiSq, p, O1, E1, O2, E2};
+}
+
+// Chi-squared p-value (df=1) via incomplete gamma approximation
+function chi2pvalue(x, df){
+  if(x<=0) return 1;
+  // P(chi2 > x) = 1 - regularized incomplete gamma(df/2, x/2)
+  return 1 - gammaIncReg(df/2, x/2);
+}
+
+function gammaIncReg(a, x){
+  // Continued fraction / series for regularized lower incomplete gamma
+  if(x<0) return 0;
+  if(x===0) return 0;
+  if(x<a+1) return gammaSeries(a,x);
+  return 1-gammaCF(a,x);
+}
+
+function gammaSeries(a,x){
+  let term=1/a, sum=term;
+  for(let n=1;n<200;n++){
+    term*=x/(a+n); sum+=term;
+    if(Math.abs(term)<1e-10*Math.abs(sum)) break;
+  }
+  return sum*Math.exp(-x+a*Math.log(x)-lnGamma(a));
+}
+
+function gammaCF(a,x){
+  let b=x+1-a,c=1/1e-30,d=1/b,h=d;
+  for(let i=1;i<=200;i++){
+    const an=-i*(i-a); b+=2; d=an*d+b; if(Math.abs(d)<1e-30) d=1e-30;
+    c=b+an/c; if(Math.abs(c)<1e-30) c=1e-30;
+    d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<1e-10) break;
+  }
+  return h*Math.exp(-x+a*Math.log(x)-lnGamma(a));
+}
+
+function lnGamma(x){
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x,tmp=x+5.5; tmp-=(x+.5)*Math.log(tmp);
+  let ser=1.000000000190015;
+  for(let j=0;j<6;j++) ser+=c[j]/++y;
+  return -tmp+Math.log(2.5066282746310005*ser/x);
+}
+
+function fmtP(p){
+  if(p===null||isNaN(p)) return '—';
+  if(p<0.001) return '<0.001';
+  if(p<0.01) return p.toFixed(3);
+  return p.toFixed(3);
+}
+
+// ═══════════════════════════════════════════════════
+//  CENSORING CALCULATION
+// ═══════════════════════════════════════════════════
+function calcCensoring(){
+  const rows=[...S.risk].filter(r=>r.n1!==''&&r.n1!=null).sort((a,b)=>a.t-b.t);
+  const ivs=[];
+  for(let i=0;i<rows.length-1;i++){
+    const t1=rows[i].t, t2=rows[i+1].t;
+    const n1s=+rows[i].n1||0, n1e=+rows[i+1].n1||0;
+    const n2s=+rows[i].n2||0, n2e=+rows[i+1].n2||0;
+    const s1a=survAt(S.pts.c1,t1),s1b=survAt(S.pts.c1,t2);
+    const s2a=survAt(S.pts.c2,t1),s2b=survAt(S.pts.c2,t2);
+    const e1=s1a>0?Math.round(n1s*(s1a-s1b)/s1a):0;
+    const e2=s2a>0?Math.round(n2s*(s2a-s2b)/s2a):0;
+    const c1=Math.max(0,n1s-n1e-e1), c2=Math.max(0,n2s-n2e-e2);
+    ivs.push({t1,t2,n1s,n1e,n2s,n2e,s1a,s1b,s2a,s2b,e1,e2,c1,c2,
+      pc1:n1s>0?c1/n1s*100:0, pc2:n2s>0?c2/n2s*100:0});
+  }
+  const tc1=ivs.reduce((s,r)=>s+r.c1,0), tc2=ivs.reduce((s,r)=>s+r.c2,0);
+  const te1=ivs.reduce((s,r)=>s+r.e1,0), te2=ivs.reduce((s,r)=>s+r.e2,0);
+  const n1t=rows[0]?+rows[0].n1||0:0, n2t=rows[0]?+rows[0].n2||0:0;
+  const m1=medianSurv(S.pts.c1), m2=medianSurv(S.pts.c2);
+  const lrt=logRankTest(ivs);
+  const ci1=greenwoodCI(S.pts.c1,ivs,'c1');
+  const ci2=greenwoodCI(S.pts.c2,ivs,'c2');
+  S.res={ivs,tc1,tc2,te1,te2,n1t,n2t,
+    pct1:n1t>0?tc1/n1t*100:0,pct2:n2t>0?tc2/n2t*100:0,
+    m1,m2,lrt,ci1,ci2};
+  return S.res;
+}
+
+function calcAndGo(){
+  syncRiskDOM();
+  if(!S.risk.some(r=>r.n1!==''&&r.n1!=null)){
+    notify('⚠ Enter at least the initial number at risk',true); return;
+  }
+  calcCensoring(); goTo(3);
+}
+
+// ═══════════════════════════════════════════════════
+//  STEP 3 — RESULTS
+// ═══════════════════════════════════════════════════
+function renderResults(){
+  if(!S.res){ console.warn("renderResults called with no results"); return; }
+  const r=S.res, lrt=r.lrt;
+
+  // Stat bar — inline header items
+  const hrStr=lrt.hr!==null?lrt.hr.toFixed(2):'—';
+  const hrCI=lrt.hrLo!==null?`${lrt.hrLo.toFixed(2)}–${lrt.hrHi.toFixed(2)}`:'';
+  const pCol=lrt.p!==null&&lrt.p<0.05?'var(--ac)':'var(--a2)';
+  document.getElementById('statBar').innerHTML=`
+    <div style="text-align:center;">
+      <div style="font-size:22px;font-weight:700;font-family:'DM Sans',sans-serif;color:var(--ac);">${hrStr}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;">HR (Peto)</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--a4);">${hrCI}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;">95% CI</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:22px;font-weight:700;font-family:'DM Sans',sans-serif;color:${pCol};">${fmtP(lrt.p)}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;">Log-rank p</div>
+    </div>`;
+  // Also update the page title with trial name
+  const tn=document.getElementById('trialN')?document.getElementById('trialN').value:'';
+  const ep=document.getElementById('epType')?document.getElementById('epType').value:'';
+  document.getElementById('p3Title').textContent=(tn?tn+' — ':'')+ep+' Analysis';
+
+  // Metrics
+  document.getElementById('mGrid').innerHTML=`
+    <div class="mc"><div class="mv ag">${r.tc1}</div><div class="ml">Censored — ${S.names[0]}</div><div class="ms">${r.pct1.toFixed(1)}% of ${r.n1t} patients</div></div>
+    <div class="mc"><div class="mv ar">${r.tc2}</div><div class="ml">Censored — ${S.names[1]}</div><div class="ms">${r.pct2.toFixed(1)}% of ${r.n2t} patients</div></div>
+    <div class="mc"><div class="mv ay" style="font-size:21px;">${r.m1} / ${r.m2}</div><div class="ml">Median Survival</div><div class="ms">${S.ax.xUnit}: G1 / G2</div></div>
+    <div class="mc"><div class="mv ab">${lrt.O1}/${lrt.E1!==undefined?lrt.E1.toFixed(1):'—'}</div><div class="ml">Obs/Exp Events G1</div><div class="ms">G2: ${lrt.O2}/${lrt.E2!==undefined?lrt.E2.toFixed(1):'—'}</div></div>`;
+
+  // Legend
+  document.getElementById('kmLeg').innerHTML=`
+    <div class="li"><div class="ld" style="background:var(--c1)"></div>${S.names[0]}</div>
+    <div class="li"><div style="width:20px;height:12px;background:rgba(0,221,180,.2);border-radius:2px;flex-shrink:0;"></div>95% CI</div>
+    <div class="li"><div class="ld" style="background:var(--c2)"></div>${S.names[1]}</div>
+    <div class="li"><div style="width:20px;height:12px;background:rgba(255,107,107,.2);border-radius:2px;flex-shrink:0;"></div>95% CI</div>`;
+
+  // Detail table
+  document.getElementById('detailBody').innerHTML=
+    r.ivs.map(iv=>`<tr>
+      <td class="ay">[${iv.t1}–${iv.t2}]</td>
+      <td>${iv.n1s}</td><td>${iv.e1}</td><td class="ag"><strong>${iv.c1}</strong></td><td>${iv.pc1.toFixed(1)}%</td>
+      <td>${iv.n2s}</td><td>${iv.e2}</td><td class="ar"><strong>${iv.c2}</strong></td><td>${iv.pc2.toFixed(1)}%</td>
+    </tr>`).join('')
+    +`<tr style="border-top:2px solid var(--bd);font-weight:600;">
+      <td>TOTAL</td><td>${r.n1t}</td><td>${r.te1}</td><td class="ag">${r.tc1}</td><td>${r.pct1.toFixed(1)}%</td>
+      <td>${r.n2t}</td><td>${r.te2}</td><td class="ar">${r.tc2}</td><td>${r.pct2.toFixed(1)}%</td>
+    </tr>`;
+
+  // Original stats in sensitivity panel
+  document.getElementById('oHR').textContent=`Orig: ${hrStr}`;
+  document.getElementById('oPV').textContent=`Orig: ${fmtP(lrt.p)}`;
+  document.getElementById('oM1').textContent=`Orig: ${r.m1}`;
+  document.getElementById('oM2').textContent=`Orig: ${r.m2}`;
+
+  renderKMChart(); renderCensorChart(); updateSens();
+}
+
+// ═══════════════════════════════════════════════════
+//  CHART HELPERS
+// ═══════════════════════════════════════════════════
+function kmOpts(leg=true){
+  return {
+    responsive:true,maintainAspectRatio:false,animation:{duration:400},
+    plugins:{legend:{display:leg,labels:{color:'#dde1ed',font:{size:10,family:'DM Mono'},usePointStyle:true,pointStyleWidth:14}}},
+    scales:{
+      x:{type:'linear',min:S.ax.xMin,max:S.ax.xMax,
+        ticks:{color:'#5a6478',font:{size:9,family:'DM Mono'}},grid:{color:'rgba(34,40,53,.5)'},
+        title:{display:true,text:`Time (${S.ax.xUnit})`,color:'#5a6478',font:{size:10}}},
+      y:{min:S.ax.yMin,max:S.ax.yMax,
+        ticks:{color:'#5a6478',font:{size:9,family:'DM Mono'}},grid:{color:'rgba(34,40,53,.5)'},
+        title:{display:true,text:'Survival Probability',color:'#5a6478',font:{size:10}}}
+    }
+  };
+}
+
+// Build CI band datasets from Greenwood CI data
+function ciDatasets(ciData, color){
+  if(!ciData||!ciData.length) return [];
+  return [
+    {
+      label:'_ci_hi',
+      data:ciData.map(d=>({x:d.t,y:d.hi})),
+      borderColor:'transparent',
+      backgroundColor:color.replace(')',',0.18)').replace('rgb','rgba'),
+      pointRadius:0, borderWidth:0, stepped:true,
+      fill:{target:'+1',above:color.replace(')',',0.18)').replace('rgb','rgba')}
+    },
+    {
+      label:'_ci_lo',
+      data:ciData.map(d=>({x:d.t,y:d.lo})),
+      borderColor:'transparent',
+      backgroundColor:color.replace(')',',0.18)').replace('rgb','rgba'),
+      pointRadius:0, borderWidth:0, stepped:true,
+      fill:false
+    }
+  ];
+}
+
+function buildCIFill(ciData, color){
+  // Use Chart.js filler — upper dataset fills down to lower dataset
+  // Approach: create a custom polygon dataset
+  if(!ciData||!ciData.length) return [];
+  const alpha='rgba('+hexToRgb(color)+',0.18)';
+  return [{
+    label:'_ci_band',
+    data:[
+      ...ciData.map(d=>({x:d.t,y:d.hi})),
+      ...[...ciData].reverse().map(d=>({x:d.t,y:d.lo}))
+    ],
+    borderColor:'transparent',
+    backgroundColor:alpha,
+    pointRadius:0, borderWidth:0,
+    tension:0, fill:true, stepped:true,
+    order:10
+  }];
+}
+
+function hexToRgb(hex){
+  if(hex.startsWith('#')) hex=hex.slice(1);
+  const n=parseInt(hex,16);
+  return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
+}
+
+function renderKMChart(){
+  const c=document.getElementById('kmChart').getContext('2d');
+  if(S.charts.km) S.charts.km.destroy();
+  const c1=[...S.pts.c1].sort((a,b)=>a.x-b.x);
+  const c2=[...S.pts.c2].sort((a,b)=>a.x-b.x);
+
+  // Build CI area using polygon trick (fill between two stepped lines)
+  const ci1=S.res.ci1||[], ci2=S.res.ci2||[];
+
+  // For clean CI bands, we create upper+lower datasets with fill
+  const ds=[];
+
+  // G1 CI upper fill
+  if(ci1.length){
+    ds.push({label:'_ci1u',data:ci1.map(d=>({x:d.t,y:d.hi})),borderColor:'transparent',backgroundColor:'rgba(0,221,180,.15)',pointRadius:0,borderWidth:0,stepped:true,fill:'+1',order:5});
+    ds.push({label:'_ci1l',data:ci1.map(d=>({x:d.t,y:d.lo})),borderColor:'transparent',backgroundColor:'rgba(0,221,180,.15)',pointRadius:0,borderWidth:0,stepped:true,fill:false,order:5});
+  }
+  // G2 CI
+  if(ci2.length&&S.nC===2){
+    ds.push({label:'_ci2u',data:ci2.map(d=>({x:d.t,y:d.hi})),borderColor:'transparent',backgroundColor:'rgba(255,107,107,.15)',pointRadius:0,borderWidth:0,stepped:true,fill:'+1',order:5});
+    ds.push({label:'_ci2l',data:ci2.map(d=>({x:d.t,y:d.lo})),borderColor:'transparent',backgroundColor:'rgba(255,107,107,.15)',pointRadius:0,borderWidth:0,stepped:true,fill:false,order:5});
+  }
+  // Curves on top
+  ds.push({label:S.names[0],data:c1.map(p=>({x:p.x,y:p.y})),borderColor:'#00ddb4',backgroundColor:'transparent',pointRadius:0,borderWidth:2.5,stepped:true,order:1});
+  if(S.nC===2) ds.push({label:S.names[1],data:c2.map(p=>({x:p.x,y:p.y})),borderColor:'#ff6b6b',backgroundColor:'transparent',pointRadius:0,borderWidth:2.5,stepped:true,order:1});
+
+  const opts=kmOpts(true);
+  opts.plugins.legend.labels.filter=(item)=>!item.text.startsWith('_');
+  S.charts.km=new Chart(c,{type:'line',data:{datasets:ds},plugins:[Chart.registry.plugins.get('filler')||{}],options:opts});
+}
+
+function renderCensorChart(){
+  const c=document.getElementById('censorChart').getContext('2d');
+  if(S.charts.cen) S.charts.cen.destroy();
+  const r=S.res;
+  const labels=r.ivs.map(iv=>`${iv.t1}–${iv.t2}`);
+  S.charts.cen=new Chart(c,{type:'bar',data:{labels,datasets:[
+    {label:S.names[0],data:r.ivs.map(iv=>iv.c1),backgroundColor:'rgba(0,221,180,.55)',borderColor:'#00ddb4',borderWidth:1,borderRadius:3},
+    ...(S.nC===2?[{label:S.names[1],data:r.ivs.map(iv=>iv.c2),backgroundColor:'rgba(255,107,107,.55)',borderColor:'#ff6b6b',borderWidth:1,borderRadius:3}]:[])
+  ]},options:{responsive:true,maintainAspectRatio:false,animation:{duration:300},
+    plugins:{legend:{labels:{color:'#dde1ed',font:{size:10,family:'DM Mono'}}}},
+    scales:{
+      x:{ticks:{color:'#5a6478',font:{size:9,family:'DM Mono'}},grid:{color:'rgba(34,40,53,.5)'}},
+      y:{ticks:{color:'#5a6478',font:{size:9,family:'DM Mono'}},grid:{color:'rgba(34,40,53,.5)'},title:{display:true,text:'N censored',color:'#5a6478',font:{size:10}}}
+    }
+  }});
+}
+
+// ═══════════════════════════════════════════════════
+//  SENSITIVITY ANALYSIS
+// ═══════════════════════════════════════════════════
+function setCType(t){
+  S.ctype=t;
+  document.getElementById('toxB').className='stb'+(t==='tox'?' tox':'');
+  document.getElementById('disB').className='stb'+(t==='dis'?' dis':'');
+  updateSens();
+}
+
+function updateSens(){
+  const s1=+document.getElementById('s1').value, s2=+document.getElementById('s2').value;
+  document.getElementById('sv1').textContent=s1+'%';
+  document.getElementById('sv2').textContent=s2+'%';
+  if(!S.res) return;
+
+  const adj1=applyAdj(S.pts.c1,'c1',s1/100);
+  const adj2=applyAdj(S.pts.c2,'c2',s2/100);
+
+  // Recompute stats on adjusted curves
+  const adjIvs=S.res.ivs.map(iv=>{
+    const s1a=survAt(adj1,iv.t1),s1b=survAt(adj1,iv.t2);
+    const s2a=survAt(adj2,iv.t1),s2b=survAt(adj2,iv.t2);
+    const e1=s1a>0?Math.round(iv.n1s*(s1a-s1b)/s1a):0;
+    const e2=s2a>0?Math.round(iv.n2s*(s2a-s2b)/s2a):0;
+    return {...iv,e1,e2};
+  });
+
+  const adjLRT=logRankTest(adjIvs);
+  const am1=medianSurv(adj1), am2=medianSurv(adj2);
+
+  document.getElementById('aHR').textContent=adjLRT.hr!==null?adjLRT.hr.toFixed(2):'—';
+  document.getElementById('aPV').textContent=fmtP(adjLRT.p);
+  document.getElementById('aM1').textContent=am1;
+  document.getElementById('aM2').textContent=am2;
+
+  const concern=getConcern(s1,s2);
+  document.getElementById('concern').innerHTML=concern.label;
+  document.getElementById('concernD').textContent=concern.detail;
+
+  document.getElementById('adjSub').textContent=
+    s1===0&&s2===0?'Sensitivity adjustment: none (sliders at 0%)':
+    `${S.ctype==='tox'?'Toxicity':'Disappointment'} — G1: ${s1}%, G2: ${s2}%`;
+
+  document.getElementById('adjLeg').innerHTML=`
+    <div class="li"><div class="ld" style="background:var(--c1)"></div>Orig ${S.names[0]}</div>
+    <div class="li"><div class="ldd" style="background:var(--c1)"></div>Adj ${S.names[0]}</div>
+    <div class="li"><div class="ld" style="background:var(--c2)"></div>Orig ${S.names[1]}</div>
+    <div class="li"><div class="ldd" style="background:var(--c2)"></div>Adj ${S.names[1]}</div>`;
+
+  renderAdjChart(adj1,adj2);
+}
+
+function applyAdj(origPts, key, pct){
+  if(pct===0) return origPts;
+  const sorted=[...origPts].sort((a,b)=>a.x-b.x);
+  if(!sorted.length) return sorted;
+  const adj=sorted.map(p=>({...p}));
+  S.res.ivs.forEach(iv=>{
+    const nc=key==='c1'?iv.c1:iv.c2;
+    const nAt=key==='c1'?iv.n1s:iv.n2s;
+    if(!nAt||!nc) return;
+    const affected=Math.round(nc*pct);
+    if(!affected) return;
+    const drop=affected/nAt*(S.ctype==='tox'?1.0:0.45);
+    adj.forEach(p=>{
+      if(p.x>=iv.t1) p.y=Math.max(0,p.y*(1-drop));
+    });
+  });
+  return adj;
+}
+
+function getConcern(s1,s2){
+  const r=S.res;
+  const mx=Math.max(r.pct1,r.pct2), df=Math.abs(r.pct1-r.pct2);
+  if(mx>30&&df>12) return{label:'<span class="ar">⚠ HIGH</span>',detail:'High censoring rate + imbalance'};
+  if(mx>15||df>8) return{label:'<span class="ay">⚡ MODERATE</span>',detail:'Sensitivity analysis advisable'};
+  return{label:'<span class="ag">✓ LOW</span>',detail:'Censoring appears balanced'};
+}
+
+function renderAdjChart(adj1,adj2){
+  const c=document.getElementById('adjChart').getContext('2d');
+  if(S.charts.adj) S.charts.adj.destroy();
+  const o1=[...S.pts.c1].sort((a,b)=>a.x-b.x);
+  const o2=[...S.pts.c2].sort((a,b)=>a.x-b.x);
+  const a1=[...adj1].sort((a,b)=>a.x-b.x);
+  const a2=[...adj2].sort((a,b)=>a.x-b.x);
+  const ds=[
+    {label:`${S.names[0]} (original)`,data:o1.map(p=>({x:p.x,y:p.y})),borderColor:'#00ddb4',backgroundColor:'transparent',pointRadius:0,borderWidth:2.5,stepped:true},
+    {label:`${S.names[0]} (adjusted)`,data:a1.map(p=>({x:p.x,y:p.y})),borderColor:'rgba(0,221,180,.45)',backgroundColor:'transparent',pointRadius:0,borderWidth:2,stepped:true,borderDash:[6,4]},
+    ...(S.nC===2?[
+      {label:`${S.names[1]} (original)`,data:o2.map(p=>({x:p.x,y:p.y})),borderColor:'#ff6b6b',backgroundColor:'transparent',pointRadius:0,borderWidth:2.5,stepped:true},
+      {label:`${S.names[1]} (adjusted)`,data:a2.map(p=>({x:p.x,y:p.y})),borderColor:'rgba(255,107,107,.45)',backgroundColor:'transparent',pointRadius:0,borderWidth:2,stepped:true,borderDash:[6,4]}
+    ]:[])
+  ];
+  const opts=kmOpts(true);
+  opts.plugins.legend.labels.font={size:10,family:'DM Mono'};
+  S.charts.adj=new Chart(c,{type:'line',data:{datasets:ds},options:opts});
+}
+
+function resetSens(){
+  document.getElementById('s1').value=0;
+  document.getElementById('s2').value=0;
+  updateSens();
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════════
+function doExport(){
+  if(!S.res) return;
+  const r=S.res, lrt=r.lrt;
+  const trial=document.getElementById('trialN').value||'Trial';
+  const ep=document.getElementById('epType').value;
+  let csv=`KMLens Analysis — ${trial} (${ep})\n\n`;
+  csv+=`Statistics\nHazard Ratio (Peto),${lrt.hr!==null?lrt.hr.toFixed(3):'NA'}\n`;
+  csv+=`HR 95% CI lower,${lrt.hrLo!==null?lrt.hrLo.toFixed(3):'NA'}\n`;
+  csv+=`HR 95% CI upper,${lrt.hrHi!==null?lrt.hrHi.toFixed(3):'NA'}\n`;
+  csv+=`Log-rank p-value,${fmtP(lrt.p)}\n\n`;
+  csv+=`Summary\nGroup,N Total,Events,Censored,% Censored,Median (${S.ax.xUnit})\n`;
+  csv+=`${S.names[0]},${r.n1t},${r.te1},${r.tc1},${r.pct1.toFixed(1)}%,${r.m1}\n`;
+  csv+=`${S.names[1]},${r.n2t},${r.te2},${r.tc2},${r.pct2.toFixed(1)}%,${r.m2}\n\n`;
+  csv+=`Interval Breakdown\nInterval,N_G1,Events_G1,Censored_G1,%_G1,N_G2,Events_G2,Censored_G2,%_G2\n`;
+  r.ivs.forEach(iv=>csv+=`${iv.t1}-${iv.t2},${iv.n1s},${iv.e1},${iv.c1},${iv.pc1.toFixed(1)}%,${iv.n2s},${iv.e2},${iv.c2},${iv.pc2.toFixed(1)}%\n`);
+  csv+=`\nDigitized Points — ${S.names[0]}\nTime,Survival,CI_lower,CI_upper\n`;
+  [...S.pts.c1].sort((a,b)=>a.x-b.x).forEach((p,i)=>{
+    const ci=r.ci1[i]||{lo:'',hi:''};
+    csv+=`${p.x.toFixed(3)},${p.y.toFixed(4)},${ci.lo!==undefined?ci.lo.toFixed(4):''},${ci.hi!==undefined?ci.hi.toFixed(4):''}\n`;
+  });
+  if(S.nC===2){
+    csv+=`\nDigitized Points — ${S.names[1]}\nTime,Survival,CI_lower,CI_upper\n`;
+    [...S.pts.c2].sort((a,b)=>a.x-b.x).forEach((p,i)=>{
+      const ci=r.ci2[i]||{lo:'',hi:''};
+      csv+=`${p.x.toFixed(3)},${p.y.toFixed(4)},${ci.lo!==undefined?ci.lo.toFixed(4):''},${ci.hi!==undefined?ci.hi.toFixed(4):''}\n`;
+    });
+  }
+  const uri='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  const a=document.createElement('a'); a.href=uri;
+  a.download=`kmlens_${trial.replace(/s+/g,'_')}_${ep}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  notify('✓ CSV exported with CI and statistics');
+}
+
+function startOver(){
+  if(!confirm('Start fresh? All data will be lost.')) return;
+  Object.assign(S,{imgEl:null,imgW:0,imgH:0,pts:{c1:[],c2:[]},mode:'calib',
+    calib:{done:false,pts:[],step:0},bounds:null,risk:[],res:null,ctype:'tox'});
+  try{ document.getElementById('fileIn').value=''; }catch(e){}
+  document.getElementById('prevWrap').style.display='none';
+  document.getElementById('toS1').disabled=true;
+  goTo(0);
+}
+
+// ═══════════════════════════════════════════════════
+//  NOTIFICATION
+// ═══════════════════════════════════════════════════
+let nt;
+function notify(msg,err=false){
+  const el=document.getElementById('notif');
+  el.textContent=msg; el.className='notif'+(err?' err':'');
+  el.style.display='flex'; clearTimeout(nt);
+  nt=setTimeout(()=>el.style.display='none',3500);
+}
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+syncLabels();
+initRiskTable();
+toggleC2Name();
+</script>
+</body>
+</html>
